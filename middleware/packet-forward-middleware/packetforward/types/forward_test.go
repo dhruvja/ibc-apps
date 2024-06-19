@@ -57,3 +57,16 @@ func TestTimeoutUnmarshalJSON(t *testing.T) {
 
 	require.Equal(t, "60000000000", string(timeoutBz))
 }
+
+func TestMemoUnmarshalJSON(t *testing.T) {
+	const memo = "{\"forward\":{\"receiver\":\"noble1f4cur2krsua2th9kkp7n0zje4stea4p9tu70u8\",\"port\":\"transfer\",\"memo\":\"Sup\",\"channel\":\"channel-0\",\"timeout\": 60000000000}}"
+	var packetMetadata types.PacketMetadata
+
+	err := json.Unmarshal([]byte(memo), &packetMetadata)
+	require.NoError(t, err)
+
+	memoBz, err := json.Marshal(packetMetadata.Forward.Memo)
+	require.NoError(t, err)
+
+	require.Equal(t, string("\"Sup\""), string(memoBz))
+}
