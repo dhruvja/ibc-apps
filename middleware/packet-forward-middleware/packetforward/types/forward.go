@@ -52,6 +52,10 @@ type JSONObject struct {
 	orderedMap orderedmap.OrderedMap
 }
 
+func (o *JSONObject) GetOrderedMap() orderedmap.OrderedMap {
+	return o.orderedMap
+}
+
 // NewJSONObject is a constructor used for tests.
 // The usage of JSONObject in the middleware is only json Marshal/Unmarshal
 func NewJSONObject(object bool, primitive []byte, orderedMap orderedmap.OrderedMap) *JSONObject {

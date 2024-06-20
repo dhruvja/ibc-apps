@@ -343,22 +343,14 @@ func (k *Keeper) ForwardTransferPacket(
 
 	// set memo for next transfer with next from this transfer.
 	if metadata.Next != nil {
-		m := &types.PacketMetadata{}
-		val, err := json.Marshal(metadata.Next)
-		if err != nil {
-			k.Logger(ctx).Error("packetForwardMiddleware error marshaling next as JSON",
-				"error", err,
+		orderedMap := metadata.Next.GetOrderedMap()
+		nextMemo, exists := orderedMap.Get("forward")
+		if !exists {
+			k.Logger(ctx).Error("packetForwardMiddleware error fetching forward object in next",
+				"error",
 			)
-			return errorsmod.Wrapf(sdkerrors.ErrJSONMarshal, err.Error())
 		}
-		err = json.Unmarshal(val, m)
-		if err != nil {
-			k.Logger(ctx).Error("packetForwardMiddleware error unmarshaling next from json",
-				"error", err,
-			)
-			return errorsmod.Wrapf(sdkerrors.ErrJSONMarshal, err.Error())
-		}	
-		memo["forward"] = m.Forward
+		memo["forward"] = nextMemo
 	}
 
 	marshalled_memo, err := json.Marshal(memo)
@@ -370,7 +362,7 @@ func (k *Keeper) ForwardTransferPacket(
 	if len(memo) == 0 {
 		marshalled_memo = []byte{}
 	}
-	
+
 	msgTransfer := transfertypes.NewMsgTransfer(
 		metadata.Port,
 		metadata.Channel,
