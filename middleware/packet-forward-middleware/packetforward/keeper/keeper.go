@@ -309,6 +309,7 @@ func (k *Keeper) ForwardTransferPacket(
 	srcPacket channeltypes.Packet,
 	srcPacketSender string,
 	receiver string,
+	memo map[string]interface{},
 	metadata *types.ForwardMetadata,
 	token sdk.Coin,
 	maxRetries uint8,
@@ -321,6 +322,9 @@ func (k *Keeper) ForwardTransferPacket(
 	packetAmount := token.Amount.Sub(feeAmount)
 	feeCoins := sdk.Coins{sdk.NewCoin(token.Denom, feeAmount)}
 	packetCoin := sdk.NewCoin(token.Denom, packetAmount)
+
+	// Remove the forward object as it is already extracted to metadata
+	delete(memo, "forward")
 
 	// pay fees
 	if feeAmount.IsPositive() {
@@ -337,20 +341,36 @@ func (k *Keeper) ForwardTransferPacket(
 		}
 	}
 
-	memo := ""
-
 	// set memo for next transfer with next from this transfer.
 	if metadata.Next != nil {
-		memoBz, err := json.Marshal(metadata.Next)
+		m := &types.PacketMetadata{}
+		val, err := json.Marshal(metadata.Next)
 		if err != nil {
 			k.Logger(ctx).Error("packetForwardMiddleware error marshaling next as JSON",
 				"error", err,
 			)
 			return errorsmod.Wrapf(sdkerrors.ErrJSONMarshal, err.Error())
 		}
-		memo = string(memoBz)
+		err = json.Unmarshal(val, m)
+		if err != nil {
+			k.Logger(ctx).Error("packetForwardMiddleware error unmarshaling next from json",
+				"error", err,
+			)
+			return errorsmod.Wrapf(sdkerrors.ErrJSONMarshal, err.Error())
+		}	
+		memo["forward"] = m.Forward
 	}
 
+	marshalled_memo, err := json.Marshal(memo)
+	if err != nil {
+		k.Logger(ctx).Error("packetForwardMiddleware error marshaling memo as JSON",
+			"error", err,
+		)
+	}
+	if len(memo) == 0 {
+		marshalled_memo = []byte{}
+	}
+	
 	msgTransfer := transfertypes.NewMsgTransfer(
 		metadata.Port,
 		metadata.Channel,
@@ -359,7 +379,7 @@ func (k *Keeper) ForwardTransferPacket(
 		metadata.Receiver,
 		DefaultTransferPacketTimeoutHeight,
 		uint64(ctx.BlockTime().UnixNano())+uint64(timeout.Nanoseconds()),
-		memo,
+		string(marshalled_memo),
 	)
 
 	k.Logger(ctx).Debug("packetForwardMiddleware ForwardTransferPacket",
@@ -498,6 +518,9 @@ func (k *Keeper) RetryTimeout(
 
 	token := sdk.NewCoin(denom, amount)
 
+	d := make(map[string]interface{})
+	_ = json.Unmarshal([]byte(data.Memo), &d)
+
 	// srcPacket and srcPacketSender are empty because inFlightPacket is non-nil.
 	return k.ForwardTransferPacket(
 		ctx,
@@ -505,6 +528,7 @@ func (k *Keeper) RetryTimeout(
 		channeltypes.Packet{},
 		"",
 		data.Sender,
+		d,
 		metadata,
 		token,
 		uint8(inFlightPacket.RetriesRemaining),
